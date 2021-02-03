@@ -7,7 +7,6 @@ import java.util.TreeMap;
 import java.io.FileReader;
 import java.math.BigInteger;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 
@@ -158,49 +157,78 @@ public class ConsoleRoutingApplication {
             return stringBuffer.toString();
         }
         
+        // Метод для преобразования какого-либо значения в Hex представление этого значения.
+        // Для строки метод будет использовать значения из ASCII
+        // Для числа метод будет использовать обычное преобразование
+        String toHex(String value) {
+            if (value.charAt(0)=='\'') {
+                value = value.replaceAll("[',]", "");
+                return stringToHex(value);
+            } else {
+                value = value.replaceAll("[,]", "");
+                String hexValue = Integer.toHexString(Integer.parseInt(value));
+                if ((hexValue.length() % 2) == 1) {
+                    hexValue = "0" + hexValue;
+                }
+                return hexValue;
+            }
+        }
+        
         @Override
-        public boolean execute(Context context, String... args) {
+        public boolean execute(Context context, String ... args) {
             // Если команда asm выполнена без ввода аргумента
             if (args == null) {
                 // Вывести сообщение о недостаточности аргументов
                 System.out.println(MSG_NOT_ENOUGH_ARGUMENTS);
             } else {
                 try {
-                    FileReader file = new FileReader(args[0]);
+                    // Создаём экземпляр файла по указанному пути
+                    FileReader file = new FileReader(context.getCurrentDirectory() + Character.toString(slash) + args[0]);
                     Scanner scannedFile = new Scanner(file);
                     // CA или AC - Счётчик Адреса - Address Counter
                     int addressCounter = 0;
                     
                     // SNT stands for Symbolic Name Table. ТСИ - Таблица Символических Имён.
                     List<String[]> snt = new ArrayList<String[]>();
+                    
+                    // Проходим по каждой строке отсканированного файла
                     while (scannedFile.hasNextLine()) {
-                        // Для определения байтового размера. Для db = 1, dw = 2, ...
-                        int byteSizeFlag = 0;
+                        
                         // Разделить строку на массив слов. Разделителем выступает " "
                         String splittedLine[] = scannedFile.nextLine().split(" ");
+                        
                         // Специализированный массив, который в последствии будет добавлен в список массивов
                         // Элементы массива представляют собой:
-                        // Имя переменной, CA, Байтовый размер, Hex формат
+                        // Имя переменной, CA, Байтовый размер, Hex формат (не Нёх)
                         String[] sntArrayToAdd = new String[4];
+                        
                         // Чтобы в sntArrayToAdd не было null
+                        // Пояснение:
+                        // случай, если sntArrayToAdd[3] == null:
+                        // sntArrayToAdd[3] += "hello" //// sntArrayToAdd[3] == "nullhello"
+                        // случай, если sntArrayToAdd[3] == "":
+                        // sntArrayToAdd[3] += "hello" //// sntArrayToAdd[3] == "hello"
                         sntArrayToAdd[3] = "";
                         
                         // Обработка имени переменной - начало
-                        // В общих чертах: пропускаем строку, если переменная с таким названием уже объявлена
-                        boolean skipScanningTheLine = false;
-                        for (String[] sntArray: snt) {
-                            if (sntArray[0].equals(splittedLine[0])) {
-                                skipScanningTheLine = true;
+                        // В общих чертах: пропускаем строку, если переменная с таким названием уже есть в списке
+                        boolean alreadyHaveThisName = false;
+                        for (String[] sntItem: snt) {
+                            if (sntItem[0].equals(splittedLine[0])) {
+                                alreadyHaveThisName = true;
                             }
                         }
                         // Пропускаем строку
-                        if (skipScanningTheLine) continue;
-                        // А если дошли до сюда, значит строку не пропускаем и новое имя заносим в массив
+                        if (alreadyHaveThisName) continue;
+                        // А если не пропускаем строку, значит новое имя заносим в массив
                         sntArrayToAdd[0] = splittedLine[0];
                         // Обработка имени переменной - конец
                         
                         // Добавим в массив AC в Hex формате
                         sntArrayToAdd[1] = Integer.toHexString(addressCounter);
+                        
+                        // Для определения байтового размера. Для db = 1, dw = 2, ...
+                        int byteSizeFlag;
                         
                         // Определение байтового размера на основе команды - начало
                         switch (splittedLine[1]) {
@@ -218,8 +246,9 @@ public class ConsoleRoutingApplication {
                                 break;
                             default:
                                 // Если в строке определено какое-то иное слово,
-                                // то выведем сообщение о ошибке и остановим выполнение приложения
+                                // то выведем сообщение о ошибке
                                 System.out.println(MSG_INVALID_DATA_STRUCTURE);
+                                //  и остановим выполнение приложения
                                 return false;
                         }
                         // Определение байтового размера на основе команды - конец
@@ -230,6 +259,7 @@ public class ConsoleRoutingApplication {
                         // Если третье слово в строке это "dup"
                         if (splittedLine[2].equals("dup")) {
                             // После "dup" стоит какое-либо число. Например 100 в строке "dup 100(0)"
+                            // "dups" будет хранить это число.
                             String dups = "";
                             int incr = 0;
                             // Определяем какое число стоит после "dup"
@@ -237,36 +267,45 @@ public class ConsoleRoutingApplication {
                                 dups += splittedLine[3].charAt(incr++);
                             }
                             incr++;
-                            String number = "";
+                            // В скобках после "dup" стоит какое-либо значение. Наприер 0 в строке "dup 100(0)"
+                            // "number" будет хранить это значение.
+                            String value = "";
                             while (!(splittedLine[3].charAt(incr) == ')')) {
-                                number += splittedLine[3].charAt(incr++);
+                                value += splittedLine[3].charAt(incr++);
                             }
+                            // dups раз переводим nubmer в Hex-представление и dups раз добавляем number в массив
                             for (int increm = 0; increm < Integer.parseInt(dups); increm++) {
-                                sntArrayToAdd[3] += stringToHex(number);
+                                sntArrayToAdd[3] += toHex(value);
                             }
-                            System.out.println(splittedLine[3]);
+                            // Подсчитываем CA
                             addressCounter = addressCounter + (byteSizeFlag * Integer.parseInt(dups));
-                        } else {
-                            int increment = splittedLine.length;
-                            while (increment > 2) {
-                                splittedLine[increment - 1] = splittedLine[increment - 1].replaceAll("[, ']", "");
-                                System.out.println(splittedLine[increment - 1]);
-                                sntArrayToAdd[3] += stringToHex(splittedLine[increment - 1]);
-                                increment--;
+                        } 
+                        // Если третье слово в строке это не "dup"
+                        else {
+                            // Проходим по всем значениям, переводим их в Hex представление и заносим в массив
+                            // ДОДЕЛАТЬ: 
+                            // рассмотреть случай "Dat1 db 1, 2, 10, 15, , ,"
+                            int increment = 2;
+                            while (increment < splittedLine.length) {
+                                sntArrayToAdd[3] += (toHex(splittedLine[increment])).toUpperCase();
+                                increment++;
                             }
+                            // Подсчитываем CA
                             addressCounter = addressCounter + (byteSizeFlag * (splittedLine.length - 2));
                         }
+                        // Добавляем в список массив
                         snt.add(sntArrayToAdd);
                     }
                     
                     // ДОДЕЛАТЬ:
                     // Скорее всего придётся переписывать все значения (1, 2, 3, 4, 1234, 'Hello!') в отдельный массив,
-                    // чтобы отдельно прорабатывать, т.к. в теории может попасться строка с разными типами по типу:
+                    // чтобы отдельно прорабатывать, т.к. в теории может попасться строка с разными типами значений, к примеру:
                     // Dat5 dw 5, 'Hello', 7
-                    // Миша, всё хуйня, давай по новой
                     
                     // Вывод ТСИ в консольку - начало
                     System.out.println(MSG_DELIM);
+                    
+                    // Для более красивого вывода определим максимальную длину среди наименований переменных
                     int maxLengthAmongNames = 0;
                     for (String[] sntArray: snt) {
                         for (int i = 0; i < 3; i++) {
@@ -275,6 +314,7 @@ public class ConsoleRoutingApplication {
                             }
                         }
                     }
+                    
                     System.out.format("%" + maxLengthAmongNames + "s", "Name");
                     System.out.println("   CA Byte Hex");
                     for (String[] sntArray: snt) {
