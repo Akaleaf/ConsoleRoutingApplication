@@ -1,0 +1,15 @@
+.DATA
+     n    db    5
+     m   db    3
+     t     db    10
+     y    dw    ?
+.CODE
+MOV AL,  2	
+MOV   BL,   n
+mul    BL		
+mov   cx, AX	
+mov   AL,  m
+mov   BL,   t
+mul    BL	
+add    AX, CX	
+mov   y,  AX	
